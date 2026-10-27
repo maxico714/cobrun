@@ -1,0 +1,11 @@
+* text=auto eol=lf
+
+*.py text
+*.json text
+*.jsonl text
+*.md text
+*.toml text
+*.yml text
+*.yaml text
+
+dist/** linguist-generated=true

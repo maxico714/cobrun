@@ -1,0 +1,31 @@
+name: Feature request
+description: Propose a COBOL statement, PICTURE clause, PICTURE feature or CLI option.
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: The construct you cannot run today, with a small example and where it comes from.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposal
+      description: Syntax and semantics, including ROUNDED/truncation and ON SIZE ERROR behaviour.
+    validations:
+      required: true
+  - type: textarea
+    id: oracle
+    attributes:
+      label: Oracle evidence
+      description: If you can compare with a mainframe, GnuCOBOL or a vendor compiler, paste the observed result. Divergences are documented, not hidden.
+  - type: checkboxes
+    id: constraints
+    attributes:
+      label: Constraints
+      options:
+        - label: This adds no runtime dependencies (stdlib only)
+        - label: This respects the input/token/depth/step caps
+        - label: This does not add CCVS85 material to the repository

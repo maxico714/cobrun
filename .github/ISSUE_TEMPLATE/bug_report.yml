@@ -1,0 +1,44 @@
+name: Bug report
+description: A wrong result, a parse error on valid COBOL, or a crash.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        For anything security-sensitive, use the private "Report a vulnerability" form instead.
+  - type: input
+    id: version
+    attributes:
+      label: cobrun version
+      description: Output of `cobrun --version`
+    validations:
+      required: true
+  - type: input
+    id: python
+    attributes:
+      label: Python version and OS
+      placeholder: Python 3.12.10, Windows 10
+    validations:
+      required: true
+  - type: textarea
+    id: program
+    attributes:
+      label: COBOL source
+      description: Minimal program that reproduces the problem, plus the input lines for ACCEPT if used.
+      render: cobol
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected result
+      description: What a mainframe or GnuCOBOL prints, if you checked. Include ROUNDED semantics if relevant.
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual result
+      description: Include the error code (`E_PARSE`, `E_RUNTIME`, `E_STEPLIMIT`) and line number if one was raised.
+    validations:
+      required: true

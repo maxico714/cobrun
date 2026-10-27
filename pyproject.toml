@@ -1,0 +1,60 @@
+[build-system]
+requires = ["setuptools>=75", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cobrun"
+version = "0.1.0"
+description = "Pure-Python COBOL-85 core-subset interpreter with assertion-grade differential testing"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "cobrun contributors" }]
+keywords = ["cobol", "cobol85", "interpreter", "differential-testing", "legacy-modernization"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: COBOL",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "Topic :: Software Development :: Interpreters",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.3", "ruff>=0.9", "mypy>=1.14", "build>=1.2", "twine>=6.1"]
+
+[project.scripts]
+cobrun = "cobrun.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/maxico714/cobrun"
+Issues = "https://github.com/maxico714/cobrun/issues"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+cobrun = ["py.typed"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "S", "C4", "SIM", "RUF"]
+ignore = ["S101"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S"]
+"src/cobrun/ccvs.py" = ["S310"]
+
+[tool.mypy]
+strict = true
+python_version = "3.10"
+files = ["src"]

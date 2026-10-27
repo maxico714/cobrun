@@ -1,0 +1,5 @@
+print("ADA LOVELACE")
+print("3")
+print("BONONO")
+print("RED GREEN BLUE")
+print(input())

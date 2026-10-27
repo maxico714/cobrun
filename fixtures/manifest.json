@@ -1,0 +1,11 @@
+{
+  "description": "Hand-written COBOL fixtures. Expected output is the interpreter's documented DISPLAY format (docs/DIFF_CONTRACT.md).",
+  "cases": [
+    { "name": "hello", "program": "hello.cbl", "expected": "hello.out" },
+    { "name": "arithmetic", "program": "arithmetic.cbl", "expected": "arithmetic.out" },
+    { "name": "rounding", "program": "rounding.cbl", "expected": "rounding.out" },
+    { "name": "perform", "program": "perform.cbl", "expected": "perform.out" },
+    { "name": "conditions", "program": "conditions.cbl", "expected": "conditions.out" },
+    { "name": "string-ops", "program": "string-ops.cbl", "expected": "string-ops.out", "accept": ["ZZ"] }
+  ]
+}
