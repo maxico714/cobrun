@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable
-from decimal import ROUND_DOWN, ROUND_HALF_UP, Decimal
+from decimal import ROUND_DOWN, ROUND_HALF_UP, Decimal, DecimalException, localcontext
 from typing import TextIO
 
-from .data import Field, Storage, format_decimal
+from .data import MAX_FIELD_LENGTH, Field, Picture, Storage, format_decimal
 from .errors import RunError, StepLimitError
 from .parser import parse_program
 from .statements import (
@@ -63,6 +63,7 @@ class Interpreter:
         self._accept = iter(accept_source or [])
         self.step_limit = step_limit
         self.steps = 0
+        self.loop_iterations = 0
         self.decimal_ops = 0
         self.rounding_ops = 0
         self.stopped = False
@@ -74,10 +75,13 @@ class Interpreter:
     # -- public ------------------------------------------------------------
     def run(self) -> None:
         index = self.paragraphs.get("MAIN", 0)
-        while index < len(self.program.paragraphs) and not self.stopped:
-            paragraph = self.program.paragraphs[index]
-            next_index = self.execute_paragraph(paragraph)
-            index = next_index if next_index is not None else index + 1
+        try:
+            while index < len(self.program.paragraphs) and not self.stopped:
+                paragraph = self.program.paragraphs[index]
+                next_index = self.execute_paragraph(paragraph)
+                index = next_index if next_index is not None else index + 1
+        except RecursionError as error:
+            raise StepLimitError(f"program exceeded {self.step_limit} statements (runaway recursion)") from error
         if self.steps > self.step_limit:
             raise StepLimitError(f"program exceeded {self.step_limit} statements", statement="STEP LIMIT")
 
@@ -147,7 +151,10 @@ class Interpreter:
             return None
         if isinstance(statement, Unstring):
             text = self.operand_text(statement.source)
-            pieces = text.split(statement.delimiter.value) if statement.delimiter else [text]
+            delimiter = statement.delimiter.value if statement.delimiter else None
+            if delimiter == "":
+                raise RunError("UNSTRING delimiter must not be empty", statement="UNSTRING")
+            pieces = text.split(delimiter) if delimiter is not None else [text]
             for name, piece in zip(statement.targets, pieces, strict=False):
                 self.store_token(name, piece)
             return None
@@ -224,14 +231,17 @@ class Interpreter:
             if statement.times is not None:
                 count = self.numeric_value(statement.times)
                 for _ in range(int(count)):
+                    self.count_iteration()
                     self.execute_paragraphs(names)
             elif statement.until is not None:
                 while not self.evaluate_condition(statement.until):
+                    self.count_iteration()
                     self.execute_paragraphs(names)
             elif statement.varying is not None:
                 name, start, step, until = statement.varying
                 self.store_numeric(name, self.numeric_value(start), rounded=False, size_error=())
                 while not self.evaluate_condition(until):
+                    self.count_iteration()
                     self.execute_paragraphs(names)
                     self.store_numeric(
                         name,
@@ -245,14 +255,17 @@ class Interpreter:
         if statement.times is not None:
             count = self.numeric_value(statement.times)
             for _ in range(int(count)):
+                self.count_iteration()
                 self.execute_statements(statement.body)
         elif statement.until is not None:
             while not self.evaluate_condition(statement.until):
+                self.count_iteration()
                 self.execute_statements(statement.body)
         elif statement.varying is not None:
             name, start, step, until = statement.varying
             self.store_numeric(name, self.numeric_value(start), rounded=False, size_error=())
             while not self.evaluate_condition(until):
+                self.count_iteration()
                 self.execute_statements(statement.body)
                 self.store_numeric(
                     name,
@@ -284,6 +297,12 @@ class Interpreter:
                 raise RunError("GO TO out of a PERFORMed paragraph is not supported", statement="GO TO")
             if self.stopped:
                 return
+
+    def count_iteration(self) -> None:
+        """Bound PERFORM loops even when the repeated paragraph executes no statements."""
+        self.loop_iterations += 1
+        if self.loop_iterations > self.step_limit:
+            raise StepLimitError(f"program exceeded {self.step_limit} statements")
 
     def store_all(
         self, targets: tuple[str, ...], value: Decimal, rounded: bool, size_error: tuple[Statement, ...]
@@ -428,19 +447,26 @@ class Interpreter:
         picture = field.picture
         if picture is None or picture.kind != "numeric":
             raise RunError(f"'{name}' is not a numeric field")
-        if rounded:
-            quant = Decimal(1).scaleb(-picture.scale)
-            value = value.quantize(quant, rounding=ROUND_HALF_UP)
-            self.rounding_ops += 1
-        truncated = _truncate(value, picture.scale)
-        integer_digits = len(str(abs(int(truncated)))) if truncated != 0 else 1
-        overflow = integer_digits > picture.digits - picture.scale
-        negative_into_unsigned = truncated < 0 and not picture.signed
-        if overflow or negative_into_unsigned:
+        precision = _picture_precision(picture, value)
+        try:
+            if rounded:
+                quant = Decimal(1).scaleb(-picture.scale)
+                value = _quantize(value, quant, ROUND_HALF_UP, precision)
+                self.rounding_ops += 1
+            truncated = _truncate(value, picture.scale, precision)
+            integer_digits = max(1, truncated.adjusted() + 1)
+            overflow = integer_digits > picture.digits - picture.scale
+            negative_into_unsigned = truncated < 0 and not picture.signed
+            if overflow or negative_into_unsigned:
+                if size_error:
+                    self.execute_statements(size_error)
+                    return
+                truncated = _truncate_high_order(truncated, picture.digits - picture.scale, precision)
+        except DecimalException as error:
             if size_error:
                 self.execute_statements(size_error)
                 return
-            truncated = _truncate_high_order(truncated, picture.digits - picture.scale)
+            raise RunError(f"numeric value does not fit '{name}'", statement="ARITHMETIC") from error
         self.storage.write(name, truncated)
 
     def store_token(self, name: str, text: str) -> None:
@@ -463,16 +489,29 @@ class Interpreter:
             raise RunError(f"'{text}' is not numeric") from error
 
 
-def _truncate(value: Decimal, scale: int) -> Decimal:
+def _picture_precision(picture: Picture, value: Decimal) -> int:
+    needed = max(picture.digits + 2, max(value.adjusted(), 0) + picture.scale + 3)
+    return max(28, min(MAX_FIELD_LENGTH + 2, needed))
+
+
+def _quantize(value: Decimal, quant: Decimal, rounding: str, precision: int) -> Decimal:
+    with localcontext() as context:
+        context.prec = precision
+        return value.quantize(quant, rounding=rounding)
+
+
+def _truncate(value: Decimal, scale: int, precision: int) -> Decimal:
     quant = Decimal(1).scaleb(-scale)
-    return value.quantize(quant, rounding=ROUND_DOWN)
+    return _quantize(value, quant, ROUND_DOWN, precision)
 
 
-def _truncate_high_order(value: Decimal, integer_digits: int) -> Decimal:
+def _truncate_high_order(value: Decimal, integer_digits: int, precision: int) -> Decimal:
     if integer_digits <= 0:
         return Decimal(0)
-    quant = Decimal(1).scaleb(integer_digits)
-    return (value % quant) if value >= 0 else -((-value) % quant)
+    with localcontext() as context:
+        context.prec = precision
+        quant = Decimal(1).scaleb(integer_digits)
+        return (value % quant) if value >= 0 else -((-value) % quant)
 
 
 def _compare_values(left: object, right: object) -> int | None:

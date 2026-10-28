@@ -67,6 +67,18 @@ def test_run_conformance_marks_unsupported_constructs(tmp_path: Path) -> None:
     assert summarize(results)["unsupported"] == 1
 
 
+def test_run_conformance_reports_unreadable_case_files(tmp_path: Path) -> None:
+    (tmp_path / "BAD-source.cbl").write_bytes(b"\xff\xfe")
+    (tmp_path / "BAD-source.out").write_text("", encoding="utf-8")
+    (tmp_path / "BAD-expected.cbl").write_text(HELLO, encoding="utf-8")
+    (tmp_path / "BAD-expected.out").write_bytes(b"\xff\xfe")
+    results = run_conformance(tmp_path)
+    statuses = {result.name: result.status for result in results}
+    assert statuses == {"BAD-source": "fail", "BAD-expected": "fail"}
+    assert all("UTF-8" in result.detail for result in results)
+    assert summarize(results)["failed"] == 2
+
+
 def test_section_of() -> None:
     assert section_of("CM101-hello") == "CM101"
     assert section_of("IC-201") == "IC"

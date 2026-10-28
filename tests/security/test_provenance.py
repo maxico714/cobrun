@@ -14,6 +14,7 @@ STDLIB_ONLY = {
     "__future__",
     "argparse",
     "collections",
+    "contextlib",
     "dataclasses",
     "decimal",
     "io",

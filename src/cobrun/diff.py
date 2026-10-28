@@ -59,18 +59,23 @@ def run_port(command: Sequence[str], stdin_text: str = "", cwd: Path | None = No
     try:
         completed = subprocess.run(  # noqa: S603 - explicit argv, no shell
             list(command),
-            input=stdin_text,
+            input=stdin_text.encode("utf-8"),
             capture_output=True,
-            text=True,
             timeout=PORT_TIMEOUT_SECONDS,
             cwd=str(cwd) if cwd else None,
             check=False,
         )
     except (OSError, subprocess.TimeoutExpired) as error:
         raise OracleError(f"cannot run the port: {error}") from error
+    try:
+        stdout = completed.stdout.decode("utf-8")
+    except UnicodeDecodeError as error:
+        raise OracleError(f"port output is not valid UTF-8: {error}") from error
+    stdout = stdout.replace("\r\n", "\n").replace("\r", "\n")
+    stderr = completed.stderr.decode("utf-8", errors="replace")
     if completed.returncode != 0:
-        raise OracleError(f"port exited with {completed.returncode}: {completed.stderr.strip()[:200]}")
-    return completed.stdout
+        raise OracleError(f"port exited with {completed.returncode}: {stderr.strip()[:200]}")
+    return stdout
 
 
 def compare(original: str, port: str) -> DiffResult:

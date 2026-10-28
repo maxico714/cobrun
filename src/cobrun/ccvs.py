@@ -19,6 +19,7 @@ from .errors import ConformanceError, OracleError
 CCVS85_URL = "https://www.itl.nist.gov/div897/ctg/software/ccvs85.zip"
 FETCH_TIMEOUT_SECONDS = 60
 MAX_DOWNLOAD_BYTES = 200 * 1024 * 1024
+MAX_CASE_BYTES = 5 * 1024 * 1024
 ZIP_MAGIC = b"PK\x03\x04"
 
 
@@ -79,18 +80,40 @@ def section_of(name: str) -> str:
     return name.split("-", 1)[0].split("_", 1)[0].upper()
 
 
+def _read_case(path: Path) -> str:
+    try:
+        size = path.stat().st_size
+    except OSError as error:
+        raise ConformanceError(f"cannot read '{path.name}': {error}") from error
+    if size > MAX_CASE_BYTES:
+        raise ConformanceError(f"'{path.name}' is larger than {MAX_CASE_BYTES} bytes")
+    try:
+        return path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as error:
+        raise ConformanceError(f"cannot read '{path.name}' as UTF-8: {error}") from error
+
+
 def run_conformance(directory: Path, step_limit: int = 100_000) -> list[ConformanceResult]:
     results: list[ConformanceResult] = []
     for case in discover_cases(directory):
         section = section_of(case.source.stem)
         try:
-            actual = run_original(case.source.read_text(encoding="utf-8"), step_limit=step_limit)
+            source_text = _read_case(case.source)
+        except ConformanceError as error:
+            results.append(ConformanceResult(case.source.stem, section, "fail", str(error)[:200]))
+            continue
+        try:
+            actual = run_original(source_text, step_limit=step_limit)
         except OracleError as error:
             message = str(error)
             status = "unsupported" if "not supported" in message or "unsupported" in message else "fail"
             results.append(ConformanceResult(case.source.stem, section, status, message[:200]))
             continue
-        expected = normalize_text(case.expected.read_text(encoding="utf-8"))
+        try:
+            expected = normalize_text(_read_case(case.expected))
+        except ConformanceError as error:
+            results.append(ConformanceResult(case.source.stem, section, "fail", str(error)[:200]))
+            continue
         observed = normalize_text(actual)
         if expected == observed:
             results.append(ConformanceResult(case.source.stem, section, "pass", ""))

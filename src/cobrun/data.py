@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from dataclasses import field as dc_field
-from decimal import ROUND_DOWN, Decimal
+from decimal import ROUND_DOWN, Decimal, localcontext
 
 from .errors import ParseError, RunError
 
@@ -25,15 +25,17 @@ class Picture:
 
     def render(self, value: Decimal) -> str:
         """Render a numeric value as the stored character form (no decimal point)."""
-        scaled = _scale_value(value, self.scale)
-        sign = "-" if scaled < 0 else ""
-        digits = str(int(abs(scaled) * (Decimal(10) ** self.scale)))
-        digits = digits.rjust(self.digits, "0")
-        if len(digits) > self.digits:
-            digits = digits[-self.digits :]
-        if self.signed:
-            return sign + digits
-        return digits
+        with localcontext() as context:
+            context.prec = max(28, self.digits + 2)
+            scaled = _scale_value(value, self.scale)
+            sign = "-" if scaled < 0 else ""
+            digits = format((abs(scaled) * (Decimal(10) ** self.scale)).to_integral_value(), "f")
+            digits = digits.rjust(self.digits, "0")
+            if len(digits) > self.digits:
+                digits = digits[-self.digits :]
+            if self.signed:
+                return sign + digits
+            return digits
 
 
 @dataclass
@@ -54,7 +56,7 @@ class Field:
 
     @property
     def is_group(self) -> bool:
-        return self.picture is None and bool(self.children)
+        return self.picture is None
 
     @property
     def length(self) -> int:
@@ -235,6 +237,8 @@ class Storage:
     def display_value(self, name: str) -> str:
         """Value as DISPLAY would show it: numeric fields with sign and decimal point."""
         field = self.field(name)
+        if field.is_group:
+            return self.render(field).rstrip()
         value = self.values[name]
         if field.picture is not None and field.picture.kind == "numeric":
             assert isinstance(value, Decimal)

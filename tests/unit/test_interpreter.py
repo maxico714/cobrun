@@ -56,6 +56,49 @@ def test_step_limit_stops_a_go_to_loop() -> None:
     assert "50 statements" in caught.value.message
 
 
+def test_large_numeric_pictures_do_not_overflow_decimal_context() -> None:
+    output = StringIO()
+    run_source(
+        """IDENTIFICATION DIVISION.
+PROGRAM-ID. WIDE.
+DATA DIVISION.
+WORKING-STORAGE SECTION.
+01 WS-N PIC 9(30).
+01 WS-G.
+   05 WS-G-N PIC 9(30).
+PROCEDURE DIVISION.
+MAIN.
+    MOVE 123456789012345678901234567890 TO WS-N.
+    DISPLAY WS-N.
+    MOVE 123456789012345678901234567890 TO WS-G-N.
+    DISPLAY WS-G.
+    STOP RUN.
+""",
+        output=output,
+    )
+    assert output.getvalue().splitlines() == [
+        "123456789012345678901234567890",
+        "123456789012345678901234567890",
+    ]
+
+
+def test_empty_unstring_delimiter_is_a_runtime_error() -> None:
+    with pytest.raises(RunError) as caught:
+        run_source("""IDENTIFICATION DIVISION.
+PROGRAM-ID. UNSTR.
+DATA DIVISION.
+WORKING-STORAGE SECTION.
+01 A PIC X(5) VALUE "ABCDE".
+01 B PIC X(5).
+01 C PIC X(5).
+PROCEDURE DIVISION.
+MAIN.
+    UNSTRING A DELIMITED BY "" INTO B C.
+    STOP RUN.
+""")
+    assert "delimiter must not be empty" in caught.value.message
+
+
 def test_division_by_zero_is_a_runtime_error() -> None:
     with pytest.raises(RunError) as caught:
         run_source("""IDENTIFICATION DIVISION.

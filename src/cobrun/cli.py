@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import sys
 from collections.abc import Sequence
@@ -72,6 +73,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
+    _configure_output()
     parser = build_parser()
     arguments = parser.parse_args(list(argv) if argv is not None else None)
     try:
@@ -111,6 +113,15 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(f"error [{error.code}]: {error}", file=sys.stderr)
         return EXIT_RUNTIME
     raise AssertionError(f"unhandled command {arguments.command}")  # pragma: no cover
+
+
+def _configure_output() -> None:
+    """Never crash on characters the terminal encoding cannot represent."""
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is not None:
+            with contextlib.suppress(OSError, ValueError):
+                reconfigure(errors="backslashreplace")
 
 
 def _read_source(path: str) -> str:

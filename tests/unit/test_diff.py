@@ -78,6 +78,23 @@ def test_run_port_empty_command() -> None:
         run_port([])
 
 
+def test_run_port_decodes_utf8(tmp_path: Path) -> None:
+    script = tmp_path / "utf8.py"
+    script.write_text(
+        'import sys\nsys.stdout.buffer.write("héllo ☃\\n".encode("utf-8"))\n',
+        encoding="utf-8",
+    )
+    assert run_port([sys.executable, str(script)]) == "héllo ☃\n"
+
+
+def test_run_port_rejects_invalid_utf8(tmp_path: Path) -> None:
+    script = tmp_path / "bad.py"
+    script.write_text('import sys\nsys.stdout.buffer.write(b"\\xff\\n")\n', encoding="utf-8")
+    with pytest.raises(OracleError) as caught:
+        run_port([sys.executable, str(script)])
+    assert "not valid UTF-8" in str(caught.value)
+
+
 def test_run_port_passes_stdin(tmp_path: Path) -> None:
     script = tmp_path / "echo.py"
     script.write_text("print(input().upper())\n", encoding="utf-8")

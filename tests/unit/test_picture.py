@@ -42,6 +42,14 @@ def test_numeric_rendering_truncates_fraction() -> None:
     assert parse_picture("9V9").render(Decimal("1.29")) == "12"
 
 
+def test_numeric_rendering_beyond_default_decimal_precision() -> None:
+    assert parse_picture("9(30)").render(Decimal("123456789012345678901234567890")) == (
+        "123456789012345678901234567890"
+    )
+    assert parse_picture("9V9(28)").render(Decimal("1.5")) == "1" + "5" + "0" * 27
+    assert len(parse_picture("9V9(5000)").render(Decimal("1.5"))) == 5001
+
+
 def test_scale_value_quantizes_without_rounding() -> None:
     assert format_decimal(Decimal("2.50")) == "2.5"
     assert format_decimal(Decimal("0.00")) == "0"
@@ -77,6 +85,13 @@ def test_group_rendering_concatenates_children() -> None:
     storage = Storage([group])
     assert storage.text("G") == "AB03"
     assert group.length == 4
+
+
+def test_empty_group_renders_as_empty_text() -> None:
+    group = Field("G", 1, None, None, [])
+    storage = Storage([group])
+    assert storage.read("G") == ""
+    assert storage.display_value("G") == ""
 
 
 def test_condition_names_are_collected() -> None:

@@ -31,6 +31,39 @@ BUMP.
         )
 
 
+def test_empty_paragraph_loop_is_bounded() -> None:
+    with pytest.raises(StepLimitError):
+        run_source(
+            """IDENTIFICATION DIVISION.
+PROGRAM-ID. P.
+DATA DIVISION.
+WORKING-STORAGE SECTION.
+01 N PIC 9(4).
+PROCEDURE DIVISION.
+EMPTY.
+MAIN.
+    PERFORM EMPTY UNTIL N = 1.
+    STOP RUN.
+""",
+            step_limit=50,
+        )
+
+
+def test_recursive_perform_is_a_step_limit_not_a_python_traceback() -> None:
+    with pytest.raises(StepLimitError):
+        run_source(
+            """IDENTIFICATION DIVISION.
+PROGRAM-ID. P.
+PROCEDURE DIVISION.
+MAIN.
+    PERFORM LOOP.
+LOOP.
+    PERFORM LOOP.
+""",
+            step_limit=100_000,
+        )
+
+
 def test_varying_by_zero_hits_step_limit() -> None:
     with pytest.raises(StepLimitError):
         run_source(
